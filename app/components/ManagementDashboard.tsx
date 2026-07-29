@@ -253,9 +253,18 @@ export function ManagementDashboard() {
           <span className="sidebar-note-mark">BI</span>
           <div><strong>Decisões com dados</strong><p>Indicadores operacionais sempre atualizados.</p></div>
         </div>
-        <button className="profile-card" type="button" aria-label={`Perfil de ${actorName}`}>
+        <button
+          className="profile-card"
+          type="button"
+          aria-label={`Sair da sessão de ${actorName}`}
+          onClick={() => {
+            void fetch("/api/auth/logout", { method: "POST" }).then(() => {
+              window.location.href = "/";
+            });
+          }}
+        >
           <span className="avatar">{actorInitials || "P"}</span>
-          <span className="profile-copy"><strong>{actorName}</strong><small>Gestão de frota</small></span>
+          <span className="profile-copy"><strong>{actorName}</strong><small>Sair</small></span>
           <span aria-hidden="true">•••</span>
         </button>
       </aside>
