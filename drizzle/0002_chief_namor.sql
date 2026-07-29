@@ -1,0 +1,1 @@
+ALTER TABLE `vehicles` ADD `odometer_km` integer;

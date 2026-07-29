@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1784676919697,
+      "tag": "0000_peaceful_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784680274565,
+      "tag": "0001_faulty_sleeper",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784682056607,
+      "tag": "0002_chief_namor",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784682811799,
+      "tag": "0003_acoustic_tomorrow_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784683395448,
+      "tag": "0004_mysterious_the_hood",
+      "breakpoints": true
+    }
+  ]
+}
