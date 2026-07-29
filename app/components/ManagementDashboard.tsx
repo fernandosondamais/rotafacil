@@ -238,16 +238,16 @@ export function ManagementDashboard() {
   return (
     <div className="app-shell management-app">
       <aside className="sidebar" aria-label="Navegação principal">
-        <Link className="brand" href="/" aria-label="RotaFácil — início">
+        <Link className="brand" href="/frota" aria-label="RotaFácil — início">
           <FleetMark />
           <span>Rota<strong>Fácil</strong></span>
         </Link>
         <nav className="main-nav">
-          <Link className="nav-item" href="/"><span className="nav-icon">⌂</span>Visão geral</Link>
-          <Link className="nav-item" href="/#frota"><span className="nav-icon">▣</span>Veículos</Link>
+          <Link className="nav-item" href="/frota"><span className="nav-icon">⌂</span>Visão geral</Link>
+          <Link className="nav-item" href="/frota#frota"><span className="nav-icon">▣</span>Veículos</Link>
           <Link className="nav-item" href="/agenda"><span className="nav-icon">◫</span>Agenda</Link>
           <Link className="nav-item active" href="/gestao"><span className="nav-icon">◒</span>Gestão</Link>
-          <Link className="nav-item" href="/#registros"><span className="nav-icon">◎</span>Registros</Link>
+          <Link className="nav-item" href="/frota#registros"><span className="nav-icon">◎</span>Registros</Link>
         </nav>
         <div className="sidebar-note">
           <span className="sidebar-note-mark">BI</span>
@@ -434,11 +434,11 @@ export function ManagementDashboard() {
       </main>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
-        <Link href="/"><span>⌂</span>Início</Link>
-        <Link href="/#frota"><span>▣</span>Veículos</Link>
+        <Link href="/frota"><span>⌂</span>Início</Link>
+        <Link href="/frota#frota"><span>▣</span>Veículos</Link>
         <Link href="/agenda" className="mobile-nav-main"><span>◫</span>Agenda</Link>
         <Link className="active" href="/gestao"><span>◒</span>Gestão</Link>
-        <Link href="/#registros"><span>◎</span>Registros</Link>
+        <Link href="/frota#registros"><span>◎</span>Registros</Link>
       </nav>
     </div>
   );

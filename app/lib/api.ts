@@ -1,15 +1,38 @@
 import type { Actor } from "@/db/repository";
 import { RepositoryError } from "@/db/repository";
 
+function cookieValue(request: Request, name: string): string | null {
+  const header = request.headers.get("cookie");
+  if (!header) return null;
+  const parts = header.split(";");
+  for (const part of parts) {
+    const [rawKey, ...rest] = part.trim().split("=");
+    if (rawKey === name) {
+      return rest.join("=") || null;
+    }
+  }
+  return null;
+}
+
 export function actorFromRequest(request: Request): Actor {
   const emailHeader = request.headers.get("oai-authenticated-user-email");
   const encodedName = request.headers.get("oai-authenticated-user-full-name");
   const encoding = request.headers.get("oai-authenticated-user-full-name-encoding");
-  let email = emailHeader ?? "paulo@desenvolvimento.local";
-  let name = "Paulo";
+  let email = emailHeader ?? "operador@rotafacil.local";
+  let name = "Operador";
+
+  const actorCookie = cookieValue(request, "rotafacil_actor_name");
+  if (actorCookie) {
+    try {
+      name = decodeURIComponent(actorCookie);
+      email = `${name.toLowerCase().replace(/\s+/g, ".")}@rotafacil.local`;
+    } catch {
+      name = actorCookie;
+    }
+  }
 
   const authorization = request.headers.get("authorization");
-  if (!emailHeader && authorization?.startsWith("Basic ")) {
+  if (!emailHeader && !actorCookie && authorization?.startsWith("Basic ")) {
     try {
       const decoded = atob(authorization.slice(6));
       const separator = decoded.indexOf(":");

@@ -1,35 +1,59 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  SESSION_COOKIE,
+  isValidSessionToken,
+  safeNextPath,
+} from "@/app/lib/session";
 
-export function middleware(request: NextRequest) {
+const PUBLIC_PATHS = new Set(["/", "/login"]);
+
+function isPublicAsset(pathname: string) {
+  return (
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/og.png" ||
+    pathname === "/hero-rotafacil.jpg" ||
+    /\.(?:png|jpg|jpeg|webp|gif|svg|ico|css|js|map|txt)$/i.test(pathname)
+  );
+}
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
   const password = process.env.APP_PASSWORD?.trim();
+
+  if (isPublicAsset(pathname) || pathname.startsWith("/api/auth/")) {
+    return NextResponse.next();
+  }
+
   if (!password) {
     return NextResponse.next();
   }
 
-  const header = request.headers.get("authorization");
-  if (header?.startsWith("Basic ")) {
-    try {
-      const decoded = atob(header.slice(6));
-      const separator = decoded.indexOf(":");
-      const provided = separator >= 0 ? decoded.slice(separator + 1) : decoded;
-      if (provided === password) {
-        return NextResponse.next();
-      }
-    } catch {
-      // fall through to challenge
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const authenticated = await isValidSessionToken(token, password);
+
+  if (PUBLIC_PATHS.has(pathname)) {
+    if (authenticated && pathname === "/login") {
+      const next = safeNextPath(request.nextUrl.searchParams.get("next"));
+      return NextResponse.redirect(new URL(next, request.url));
     }
+    return NextResponse.next();
   }
 
-  return new NextResponse("Autenticação necessária para o RotaFácil.", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="RotaFacil", charset="UTF-8"',
-      "Cache-Control": "no-store",
-    },
-  });
+  if (authenticated) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Sessão expirada. Faça login novamente." }, { status: 401 });
+  }
+
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("next", pathname);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|og.png).*)"],
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };

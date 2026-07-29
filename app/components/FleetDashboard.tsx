@@ -422,13 +422,13 @@ export function FleetDashboard() {
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Navegação principal">
-        <a className="brand" href="#inicio" aria-label="RotaFácil — início">
+        <a className="brand" href="/frota" aria-label="RotaFácil — início">
           <FleetMark />
           <span>Rota<strong>Fácil</strong></span>
         </a>
 
         <nav className="main-nav">
-          <a className="nav-item active" href="#inicio"><span className="nav-icon">⌂</span>Visão geral</a>
+          <a className="nav-item active" href="/frota"><span className="nav-icon">⌂</span>Visão geral</a>
           <a className="nav-item" href="#frota"><span className="nav-icon">▣</span>Veículos</a>
           <a className="nav-item" href="/agenda"><span className="nav-icon">◫</span>Agenda</a>
           <a className="nav-item" href="/gestao"><span className="nav-icon">◒</span>Gestão</a>
@@ -440,9 +440,18 @@ export function FleetDashboard() {
           <div><strong>Frota organizada</strong><p>Disponibilidade sempre atualizada.</p></div>
         </div>
 
-        <button className="profile-card" type="button" aria-label={`Perfil de ${actorName}`}>
+        <button
+          className="profile-card"
+          type="button"
+          aria-label={`Sair da sessão de ${actorName}`}
+          onClick={() => {
+            void fetch("/api/auth/logout", { method: "POST" }).then(() => {
+              window.location.href = "/";
+            });
+          }}
+        >
           <span className="avatar">{actorInitials || "P"}</span>
-          <span className="profile-copy"><strong>{actorName}</strong><small>Colaborador</small></span>
+          <span className="profile-copy"><strong>{actorName}</strong><small>Sair</small></span>
           <span aria-hidden="true">•••</span>
         </button>
       </aside>
@@ -689,7 +698,7 @@ export function FleetDashboard() {
       </main>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
-        <a className="active" href="#inicio"><span>⌂</span>Início</a>
+        <a className="active" href="/frota"><span>⌂</span>Início</a>
         <a href="#frota"><span>▣</span>Veículos</a>
         <button type="button" onClick={() => openReservation()} aria-label="Nova reserva">＋</button>
         <a href="/agenda"><span>◫</span>Agenda</a>

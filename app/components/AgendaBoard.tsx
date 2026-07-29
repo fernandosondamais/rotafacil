@@ -639,24 +639,33 @@ export function AgendaBoard() {
   return (
     <div className="app-shell agenda-app">
       <aside className="sidebar" aria-label="Navegação principal">
-        <Link className="brand" href="/" aria-label="RotaFácil — início">
+        <Link className="brand" href="/frota" aria-label="RotaFácil — início">
           <FleetMark />
           <span>Rota<strong>Fácil</strong></span>
         </Link>
         <nav className="main-nav">
-          <Link className="nav-item" href="/"><span className="nav-icon">⌂</span>Visão geral</Link>
-          <Link className="nav-item" href="/#frota"><span className="nav-icon">▣</span>Veículos</Link>
+          <Link className="nav-item" href="/frota"><span className="nav-icon">⌂</span>Visão geral</Link>
+          <Link className="nav-item" href="/frota#frota"><span className="nav-icon">▣</span>Veículos</Link>
           <Link className="nav-item active" href="/agenda"><span className="nav-icon">◫</span>Agenda</Link>
           <Link className="nav-item" href="/gestao"><span className="nav-icon">◒</span>Gestão</Link>
-          <Link className="nav-item" href="/#registros"><span className="nav-icon">◎</span>Registros</Link>
+          <Link className="nav-item" href="/frota#registros"><span className="nav-icon">◎</span>Registros</Link>
         </nav>
         <div className="sidebar-note">
           <span className="sidebar-note-mark">AG</span>
           <div><strong>Rotas organizadas</strong><p>Motoristas e obras no mesmo mapa.</p></div>
         </div>
-        <button className="profile-card" type="button" aria-label={`Perfil de ${actorName}`}>
+        <button
+          className="profile-card"
+          type="button"
+          aria-label={`Sair da sessão de ${actorName}`}
+          onClick={() => {
+            void fetch("/api/auth/logout", { method: "POST" }).then(() => {
+              window.location.href = "/";
+            });
+          }}
+        >
           <span className="avatar">{actorInitials || "P"}</span>
-          <span className="profile-copy"><strong>{actorName}</strong><small>Colaborador</small></span>
+          <span className="profile-copy"><strong>{actorName}</strong><small>Sair</small></span>
           <span aria-hidden="true">•••</span>
         </button>
       </aside>
@@ -800,7 +809,7 @@ export function AgendaBoard() {
                                 <small>{vehicleUse.purpose}</small>
                                 {vehicleUse.status === "reserved" && (
                                   <div className="visit-actions">
-                                    <Link href="/">Abrir frota</Link>
+                                    <Link href="/frota">Abrir frota</Link>
                                     <button className="cancel" type="button" disabled={busyKey !== null} onClick={() => void cancelVehicleUse(vehicleUse)} aria-label="Cancelar utilização">×</button>
                                   </div>
                                 )}
@@ -867,8 +876,8 @@ export function AgendaBoard() {
       </main>
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
-        <Link href="/"><span>⌂</span>Início</Link>
-        <Link href="/#frota"><span>▣</span>Veículos</Link>
+        <Link href="/frota"><span>⌂</span>Início</Link>
+        <Link href="/frota#frota"><span>▣</span>Veículos</Link>
         <button type="button" onClick={() => openEntry()} aria-label="Novo agendamento">＋</button>
         <Link className="active" href="/agenda"><span>◫</span>Agenda</Link>
         <Link href="/gestao"><span>◒</span>Gestão</Link>
