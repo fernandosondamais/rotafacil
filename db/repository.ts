@@ -644,13 +644,11 @@ export async function getDashboard(date: string) {
         r.id, r.vehicle_id, r.driver_id, v.plate, v.model, v.color,
         r.user_name, r.user_email, r.destination, r.purpose,
         r.start_at, r.end_at, r.status, r.notes, r.checkout_at, r.return_at,
-        SUM(CASE WHEN p.stage = 'checkout' THEN 1 ELSE 0 END) AS checkout_photos,
-        SUM(CASE WHEN p.stage = 'return' THEN 1 ELSE 0 END) AS return_photos
+        (SELECT COUNT(*) FROM reservation_photos p WHERE p.reservation_id = r.id AND p.stage = 'checkout') AS checkout_photos,
+        (SELECT COUNT(*) FROM reservation_photos p WHERE p.reservation_id = r.id AND p.stage = 'return') AS return_photos
       FROM reservations r
       JOIN vehicles v ON v.id = r.vehicle_id
-      LEFT JOIN reservation_photos p ON p.reservation_id = r.id
       WHERE r.start_at <= ? AND r.end_at >= ? AND r.status != 'cancelled'
-      GROUP BY r.id
       ORDER BY r.start_at ASC`,
     )
     .bind(end, start)
@@ -722,13 +720,11 @@ export async function getReservation(id: string): Promise<ReservationRecord | nu
         r.id, r.vehicle_id, r.driver_id, v.plate, v.model, v.color,
         r.user_name, r.user_email, r.destination, r.purpose,
         r.start_at, r.end_at, r.status, r.notes, r.checkout_at, r.return_at,
-        SUM(CASE WHEN p.stage = 'checkout' THEN 1 ELSE 0 END) AS checkout_photos,
-        SUM(CASE WHEN p.stage = 'return' THEN 1 ELSE 0 END) AS return_photos
+        (SELECT COUNT(*) FROM reservation_photos p WHERE p.reservation_id = r.id AND p.stage = 'checkout') AS checkout_photos,
+        (SELECT COUNT(*) FROM reservation_photos p WHERE p.reservation_id = r.id AND p.stage = 'return') AS return_photos
       FROM reservations r
       JOIN vehicles v ON v.id = r.vehicle_id
-      LEFT JOIN reservation_photos p ON p.reservation_id = r.id
-      WHERE r.id = ?
-      GROUP BY r.id`,
+      WHERE r.id = ?`,
     )
     .bind(id)
     .first<ReservationRow>();
@@ -1820,13 +1816,11 @@ export async function getManagementDashboard(startDate: string, endDate: string)
           r.id, r.vehicle_id, v.plate, v.model, v.color, v.category,
           r.user_name, r.user_email, r.destination, r.purpose,
           r.start_at, r.end_at, r.status, r.checkout_at, r.return_at, r.cancelled_at,
-          SUM(CASE WHEN p.stage = 'checkout' THEN 1 ELSE 0 END) AS checkout_photos,
-          SUM(CASE WHEN p.stage = 'return' THEN 1 ELSE 0 END) AS return_photos
+          (SELECT COUNT(*) FROM reservation_photos p WHERE p.reservation_id = r.id AND p.stage = 'checkout') AS checkout_photos,
+          (SELECT COUNT(*) FROM reservation_photos p WHERE p.reservation_id = r.id AND p.stage = 'return') AS return_photos
         FROM reservations r
         JOIN vehicles v ON v.id = r.vehicle_id
-        LEFT JOIN reservation_photos p ON p.reservation_id = r.id
         WHERE r.start_at < ? AND r.end_at >= ?
-        GROUP BY r.id
         ORDER BY r.start_at`,
       )
       .bind(periodEndIso, periodStartIso)

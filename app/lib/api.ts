@@ -66,9 +66,18 @@ export function errorResponse(error: unknown) {
   if (error instanceof RepositoryError) {
     return Response.json({ error: error.message }, { status: error.status });
   }
-  const message = error instanceof Error ? error.message : "Erro inesperado.";
   console.error(error);
-  return Response.json({ error: message }, { status: 500 });
+  const raw = error instanceof Error ? error.message : "";
+  const looksLikeSql =
+    /GROUP BY|relation |column |syntax error|duplicate key|violates/i.test(raw);
+  return Response.json(
+    {
+      error: looksLikeSql
+        ? "Não foi possível concluir a operação no banco de dados. Tente novamente."
+        : raw || "Erro inesperado.",
+    },
+    { status: 500 },
+  );
 }
 
 export function isIsoDate(value: string) {
