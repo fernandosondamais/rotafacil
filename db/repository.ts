@@ -389,6 +389,32 @@ function dayBounds(date: string) {
   };
 }
 
+/** Overlap half-open: start < endNovo AND end > startNovo. No Postgres usa timestamptz. */
+function reservationOverlapSql(startColumn = "start_at", endColumn = "end_at") {
+  if (getRuntimeMode() === "postgres") {
+    return `${startColumn}::timestamptz < ?::timestamptz AND ${endColumn}::timestamptz > ?::timestamptz`;
+  }
+  return `${startColumn} < ? AND ${endColumn} > ?`;
+}
+
+function formatPeriodLabel(startAt: string, endAt: string) {
+  try {
+    const start = new Intl.DateTimeFormat("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date(startAt));
+    const end = new Intl.DateTimeFormat("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date(endAt));
+    return `${start}–${end}`;
+  } catch {
+    return "no período informado";
+  }
+}
+
 function addDays(date: string, amount: number) {
   const value = new Date(`${date}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + amount);
@@ -439,6 +465,52 @@ async function initializeDatabase() {
     }
   }
   await db.prepare("CREATE INDEX IF NOT EXISTS reservations_driver_idx ON reservations(driver_id)").run();
+
+  // Normaliza timestamps antigos em UTC (Z) para -03:00, evitando falso conflito textual.
+  if (getRuntimeMode() === "postgres") {
+    await db
+      .prepare(
+        `UPDATE reservations
+         SET start_at = to_char(start_at::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD"T"HH24:MI:SS') || '-03:00'
+         WHERE start_at LIKE '%Z'`,
+      )
+      .run();
+    await db
+      .prepare(
+        `UPDATE reservations
+         SET end_at = to_char(end_at::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD"T"HH24:MI:SS') || '-03:00'
+         WHERE end_at LIKE '%Z'`,
+      )
+      .run();
+    await db
+      .prepare(
+        `UPDATE reservations
+         SET checkout_at = to_char(checkout_at::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD"T"HH24:MI:SS') || '-03:00'
+         WHERE checkout_at LIKE '%Z'`,
+      )
+      .run();
+    await db
+      .prepare(
+        `UPDATE reservations
+         SET return_at = to_char(return_at::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD"T"HH24:MI:SS') || '-03:00'
+         WHERE return_at LIKE '%Z'`,
+      )
+      .run();
+    await db
+      .prepare(
+        `UPDATE maintenance_schedules
+         SET start_at = to_char(start_at::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD"T"HH24:MI:SS') || '-03:00'
+         WHERE start_at LIKE '%Z'`,
+      )
+      .run();
+    await db
+      .prepare(
+        `UPDATE maintenance_schedules
+         SET end_at = to_char(end_at::timestamptz AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD"T"HH24:MI:SS') || '-03:00'
+         WHERE end_at LIKE '%Z'`,
+      )
+      .run();
+  }
 
   if (getRuntimeMode() === "postgres" && process.env.APP_SEED === "false") {
     return;
@@ -813,7 +885,7 @@ export async function createReservation(
     .prepare(
       `SELECT id FROM maintenance_schedules
        WHERE vehicle_id = ? AND status IN ('planned', 'in_progress')
-         AND start_at < ? AND end_at > ?
+         AND ${reservationOverlapSql()}
        LIMIT 1`,
     )
     .bind(input.vehicleId, input.endAt, input.startAt)
@@ -840,13 +912,13 @@ export async function createReservation(
     const [driverReservationConflict, driverVisitConflict] = await Promise.all([
       db
         .prepare(
-          `SELECT id FROM reservations
+          `SELECT id, start_at, end_at, destination FROM reservations
            WHERE driver_id = ? AND status IN ('reserved', 'in_use')
-             AND start_at < ? AND end_at > ?
+             AND ${reservationOverlapSql()}
            LIMIT 1`,
         )
         .bind(input.driverId, input.endAt, input.startAt)
-        .first<{ id: string }>(),
+        .first<{ id: string; start_at: string; end_at: string; destination: string }>(),
       db
         .prepare(
           `SELECT id FROM agenda_visits
@@ -858,9 +930,38 @@ export async function createReservation(
         .bind(input.driverId, input.endAt, input.startAt)
         .first<{ id: string }>(),
     ]);
-    if (driverReservationConflict || driverVisitConflict) {
+    if (driverReservationConflict) {
+      throw new RepositoryError(
+        `Este motorista já possui reserva ${formatPeriodLabel(driverReservationConflict.start_at, driverReservationConflict.end_at)} (${driverReservationConflict.destination}).`,
+        409,
+      );
+    }
+    if (driverVisitConflict) {
       throw new RepositoryError("Este motorista já possui um compromisso nesse horário.", 409);
     }
+  }
+
+  const existingVehicleReservation = await db
+    .prepare(
+      `SELECT id, start_at, end_at, destination, user_name FROM reservations
+       WHERE vehicle_id = ?
+         AND status IN ('reserved', 'in_use')
+         AND ${reservationOverlapSql()}
+       LIMIT 1`,
+    )
+    .bind(input.vehicleId, input.endAt, input.startAt)
+    .first<{
+      id: string;
+      start_at: string;
+      end_at: string;
+      destination: string;
+      user_name: string;
+    }>();
+  if (existingVehicleReservation) {
+    throw new RepositoryError(
+      `Este veículo já possui reserva ${formatPeriodLabel(existingVehicleReservation.start_at, existingVehicleReservation.end_at)} para ${existingVehicleReservation.user_name} (${existingVehicleReservation.destination}). Cancele essa reserva ou escolha outro horário.`,
+      409,
+    );
   }
 
   const id = crypto.randomUUID();
@@ -870,15 +971,7 @@ export async function createReservation(
       `INSERT INTO reservations (
         id, vehicle_id, driver_id, user_name, user_email, destination, purpose,
         start_at, end_at, status, notes, created_at, updated_at
-      )
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?
-      WHERE NOT EXISTS (
-        SELECT 1 FROM reservations
-        WHERE vehicle_id = ?
-          AND status IN ('reserved', 'in_use')
-          AND start_at < ?
-          AND end_at > ?
-      )`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
     )
     .bind(
       id,
@@ -893,15 +986,12 @@ export async function createReservation(
       input.notes,
       now,
       now,
-      input.vehicleId,
-      input.endAt,
-      input.startAt,
     )
     .run();
 
   const created = await getReservation(id);
   if (!created) {
-    throw new RepositoryError("Este veículo já possui uma reserva nesse período.", 409);
+    throw new RepositoryError("Não foi possível confirmar a reserva. Tente novamente.", 500);
   }
 
   await addAuditLog("reservation.created", actor, id, input.vehicleId, {
@@ -1513,7 +1603,7 @@ export async function createAgendaVisit(
         `SELECT id FROM reservations
          WHERE vehicle_id = ? AND status IN ('reserved', 'in_use')
            AND lower(user_name) != lower(?)
-           AND start_at < ? AND end_at > ?
+           AND ${reservationOverlapSql()}
          LIMIT 1`,
       )
       .bind(input.vehicleId, driver.name, periodEnd, periodStart)
@@ -1526,7 +1616,7 @@ export async function createAgendaVisit(
       .prepare(
         `SELECT id FROM maintenance_schedules
          WHERE vehicle_id = ? AND status IN ('planned', 'in_progress')
-           AND start_at < ? AND end_at > ?
+           AND ${reservationOverlapSql()}
          LIMIT 1`,
       )
       .bind(input.vehicleId, periodEnd, periodStart)
@@ -1659,7 +1749,7 @@ export async function createMaintenance(
       .prepare(
         `SELECT id FROM maintenance_schedules
          WHERE vehicle_id = ? AND status IN ('planned', 'in_progress')
-           AND start_at < ? AND end_at > ?
+           AND ${reservationOverlapSql()}
          LIMIT 1`,
       )
       .bind(input.vehicleId, input.endAt, input.startAt)
@@ -1668,7 +1758,7 @@ export async function createMaintenance(
       .prepare(
         `SELECT id FROM reservations
          WHERE vehicle_id = ? AND status IN ('reserved', 'in_use')
-           AND start_at < ? AND end_at > ?
+           AND ${reservationOverlapSql()}
          LIMIT 1`,
       )
       .bind(input.vehicleId, input.endAt, input.startAt)
