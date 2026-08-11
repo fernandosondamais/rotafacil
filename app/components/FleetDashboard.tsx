@@ -320,20 +320,21 @@ export function FleetDashboard() {
     }
   }
 
-  async function archiveCurrentVehicle() {
-    if (!editingVehicleId) return;
+  async function archiveVehicleById(vehicleId: string, label: string) {
     const confirmed = window.confirm(
-      "Remover este veículo da frota?\n\nO histórico será preservado. Reservas futuras serão canceladas. Utilizações em andamento precisam ser concluídas antes.",
+      `Remover ${label} da frota?\n\nO histórico será preservado. Reservas futuras serão canceladas. Utilizações em andamento precisam ser concluídas antes.`,
     );
     if (!confirmed) return;
 
-    setBusyKey("vehicle-archive");
+    setBusyKey(`vehicle-archive-${vehicleId}`);
     try {
-      const response = await fetch(`/api/vehicles/${editingVehicleId}`, { method: "DELETE" });
+      const response = await fetch(`/api/vehicles/${vehicleId}`, { method: "DELETE" });
       if (!response.ok) throw new Error(await readApiError(response));
-      setVehicleModalOpen(false);
-      setReturnToReservation(false);
-      setEditingVehicleId(null);
+      if (editingVehicleId === vehicleId) {
+        setVehicleModalOpen(false);
+        setReturnToReservation(false);
+        setEditingVehicleId(null);
+      }
       setNotice({ tone: "success", text: "Veículo removido da frota operacional." });
       await loadDashboard(true);
     } catch (error) {
@@ -344,6 +345,14 @@ export function FleetDashboard() {
     } finally {
       setBusyKey(null);
     }
+  }
+
+  async function archiveCurrentVehicle() {
+    if (!editingVehicleId) return;
+    await archiveVehicleById(
+      editingVehicleId,
+      `${vehicleForm.model || "este veículo"} (${vehicleForm.plate || "sem placa"})`,
+    );
   }
 
   async function submitReservation(event: FormEvent<HTMLFormElement>) {
@@ -593,7 +602,15 @@ export function FleetDashboard() {
                         <span className="vehicle-type">{vehicle.category}</span>
                         <div className="vehicle-card-controls">
                           <span className={`status-pill ${vehicle.availability}`}><i /> {copy.label}</span>
-                          <button className="vehicle-edit-button" type="button" onClick={() => openVehicleForm(vehicle)} aria-label={`Editar ${vehicle.model}`} title="Editar veículo">✎</button>
+                          <button className="vehicle-edit-button" type="button" onClick={() => openVehicleForm(vehicle)} aria-label={`Editar ${vehicle.model}`} title="Editar">✎</button>
+                          <button
+                            className="vehicle-delete-button"
+                            type="button"
+                            disabled={busyKey !== null}
+                            onClick={() => void archiveVehicleById(vehicle.id, `${vehicle.model} (${vehicle.plate})`)}
+                            aria-label={`Excluir ${vehicle.model}`}
+                            title="Excluir veículo"
+                          >✕</button>
                         </div>
                       </div>
                       <div className="vehicle-visual" aria-hidden="true">
@@ -698,22 +715,30 @@ export function FleetDashboard() {
                         onClick={() => void updateStatus(reservation, "start")}
                       >{busyKey === `start-${reservation.id}` ? "Iniciando…" : "Iniciar"}</button>
                       <button
-                        className="more-action"
+                        className="small-action danger"
                         type="button"
                         disabled={busyKey !== null}
                         onClick={() => void updateStatus(reservation, "cancel")}
-                        aria-label={`Cancelar reserva de ${reservation.model}`}
-                        title="Cancelar reserva"
-                      >×</button>
+                        aria-label={`Excluir reserva de ${reservation.model}`}
+                        title="Excluir reserva"
+                      >{busyKey === `cancel-${reservation.id}` ? "Excluindo…" : "Excluir"}</button>
                     </>
-                  ) : (
-                    <button
-                      className="small-action dark"
-                      type="button"
-                      disabled={busyKey !== null || reservation.returnPhotos < 1}
-                      onClick={() => void updateStatus(reservation, "complete")}
-                    >{busyKey === `complete-${reservation.id}` ? "Finalizando…" : "Finalizar"}</button>
-                  )}
+                  ) : reservation.status === "in_use" ? (
+                    <>
+                      <button
+                        className="small-action dark"
+                        type="button"
+                        disabled={busyKey !== null || reservation.returnPhotos < 1}
+                        onClick={() => void updateStatus(reservation, "complete")}
+                      >{busyKey === `complete-${reservation.id}` ? "Fechando…" : "Fechar"}</button>
+                      <button
+                        className="small-action danger"
+                        type="button"
+                        disabled
+                        title="Finalize a utilização em andamento para liberar o veículo"
+                      >Excluir</button>
+                    </>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -792,7 +817,7 @@ export function FleetDashboard() {
               <label className="form-field full"><span>Observações <small>opcional</small></span><textarea value={form.notes} onChange={(event) => changeForm("notes", event.target.value)} placeholder="Informações úteis para a equipe" maxLength={1000} rows={3} /></label>
               <div className="form-note full"><span>✓</span>O sistema bloqueará automaticamente conflitos de horário.</div>
               <div className="modal-actions full">
-                <button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Cancelar</button>
+                <button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Fechar</button>
                 <button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "create" ? "Salvando…" : "Confirmar reserva"}</button>
               </div>
             </form>
@@ -862,11 +887,11 @@ export function FleetDashboard() {
                     onClick={() => void archiveCurrentVehicle()}
                     disabled={busyKey !== null}
                   >
-                    {busyKey === "vehicle-archive" ? "Removendo…" : "Excluir veículo"}
+                    {busyKey?.startsWith("vehicle-archive") ? "Excluindo…" : "Excluir"}
                   </button>
                 ) : null}
                 <div className="modal-actions-spacer">
-                  <button className="secondary-button" type="button" onClick={closeVehicleForm}>Cancelar</button>
+                  <button className="secondary-button" type="button" onClick={closeVehicleForm}>Fechar</button>
                   <button className="primary-button" type="submit" disabled={busyKey !== null}>
                     {busyKey === "vehicle-save" ? "Salvando…" : editingVehicleId ? "Salvar alterações" : "Adicionar veículo"}
                   </button>

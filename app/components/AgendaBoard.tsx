@@ -588,8 +588,8 @@ export function AgendaBoard() {
       const messages = {
         confirm: "Visita confirmada.",
         start: "Visita iniciada.",
-        complete: "Visita concluída.",
-        cancel: "Visita cancelada.",
+        complete: "Visita fechada.",
+        cancel: "Visita excluída.",
       };
       setNotice({ tone: "success", text: messages[action] });
       await loadAgenda(true);
@@ -617,8 +617,8 @@ export function AgendaBoard() {
       if (!response.ok) throw new Error(await readApiError(response));
       const messages = {
         start: "Manutenção iniciada.",
-        complete: "Manutenção concluída e veículo liberado.",
-        cancel: "Manutenção cancelada e veículo liberado.",
+        complete: "Manutenção fechada e veículo liberado.",
+        cancel: "Manutenção excluída e veículo liberado.",
       };
       setNotice({ tone: "success", text: messages[action] });
       await loadAgenda(true);
@@ -641,7 +641,7 @@ export function AgendaBoard() {
         body: JSON.stringify({ action: "cancel" }),
       });
       if (!response.ok) throw new Error(await readApiError(response));
-      setNotice({ tone: "success", text: "Utilização cancelada e veículo liberado." });
+      setNotice({ tone: "success", text: "Utilização excluída e veículo liberado." });
       await loadAgenda(true);
     } catch (error) {
       setNotice({
@@ -827,7 +827,14 @@ export function AgendaBoard() {
                                 {vehicleUse.status === "reserved" && (
                                   <div className="visit-actions">
                                     <Link href="/frota">Abrir frota</Link>
-                                    <button className="cancel" type="button" disabled={busyKey !== null} onClick={() => void cancelVehicleUse(vehicleUse)} aria-label="Cancelar utilização">×</button>
+                                    <button className="cancel" type="button" disabled={busyKey !== null} onClick={() => void cancelVehicleUse(vehicleUse)}>
+                                      {busyKey === `vehicle-use-cancel-${vehicleUse.id}` ? "Excluindo…" : "Excluir"}
+                                    </button>
+                                  </div>
+                                )}
+                                {vehicleUse.status === "in_use" && (
+                                  <div className="visit-actions">
+                                    <Link href="/frota">Fechar na frota</Link>
                                   </div>
                                 )}
                               </article>
@@ -845,8 +852,12 @@ export function AgendaBoard() {
                                 <div className="visit-actions">
                                   {visit.status === "planned" && <button type="button" disabled={busyKey !== null} onClick={() => void updateVisit(visit, "confirm")}>Confirmar</button>}
                                   {(visit.status === "planned" || visit.status === "confirmed") && <button type="button" disabled={busyKey !== null} onClick={() => void updateVisit(visit, "start")}>Iniciar</button>}
-                                  {visit.status === "in_progress" && <button type="button" disabled={busyKey !== null} onClick={() => void updateVisit(visit, "complete")}>Concluir</button>}
-                                  {(visit.status === "planned" || visit.status === "confirmed") && <button className="cancel" type="button" disabled={busyKey !== null} onClick={() => void updateVisit(visit, "cancel")} aria-label="Cancelar visita">×</button>}
+                                  {visit.status === "in_progress" && <button type="button" disabled={busyKey !== null} onClick={() => void updateVisit(visit, "complete")}>{busyKey === `complete-${visit.id}` ? "Fechando…" : "Fechar"}</button>}
+                                  {(visit.status === "planned" || visit.status === "confirmed") && (
+                                    <button className="cancel" type="button" disabled={busyKey !== null} onClick={() => void updateVisit(visit, "cancel")}>
+                                      {busyKey === `cancel-${visit.id}` ? "Excluindo…" : "Excluir"}
+                                    </button>
+                                  )}
                                 </div>
                               </article>
                             ))}
@@ -862,8 +873,12 @@ export function AgendaBoard() {
                                 {maintenance.provider && <small><span aria-hidden="true">⌂</span>{maintenance.provider}</small>}
                                 <div className="visit-actions">
                                   {maintenance.status === "planned" && <button type="button" disabled={busyKey !== null} onClick={() => void updateMaintenance(maintenance, "start")}>Iniciar</button>}
-                                  {maintenance.status === "in_progress" && <button type="button" disabled={busyKey !== null} onClick={() => void updateMaintenance(maintenance, "complete")}>Concluir</button>}
-                                  {maintenance.status === "planned" && <button className="cancel" type="button" disabled={busyKey !== null} onClick={() => void updateMaintenance(maintenance, "cancel")} aria-label="Cancelar manutenção">×</button>}
+                                  {maintenance.status === "in_progress" && <button type="button" disabled={busyKey !== null} onClick={() => void updateMaintenance(maintenance, "complete")}>{busyKey === `maintenance-complete-${maintenance.id}` ? "Fechando…" : "Fechar"}</button>}
+                                  {maintenance.status === "planned" && (
+                                    <button className="cancel" type="button" disabled={busyKey !== null} onClick={() => void updateMaintenance(maintenance, "cancel")}>
+                                      {busyKey === `maintenance-cancel-${maintenance.id}` ? "Excluindo…" : "Excluir"}
+                                    </button>
+                                  )}
                                 </div>
                               </article>
                             ))}
@@ -957,6 +972,9 @@ export function AgendaBoard() {
               )}
             </div>
             <div className="form-note warning driver-manager-note"><span>!</span>Ao excluir, compromissos futuros serão cancelados e o histórico concluído será preservado. Atividades em andamento precisam ser concluídas primeiro.</div>
+            <div className="modal-actions full">
+              <button className="secondary-button" type="button" onClick={() => setDriversModalOpen(false)}>Fechar</button>
+            </div>
           </section>
         </div>
       )}
@@ -996,7 +1014,7 @@ export function AgendaBoard() {
                 <label className="form-field full"><span>Motivo da utilização</span><input value={vehicleUseForm.purpose} maxLength={160} onChange={(event) => changeVehicleUseForm("purpose", event.target.value)} placeholder="Ex.: visita externa, retirada de material" /></label>
                 <label className="form-field full"><span>Observações <small>(opcional)</small></span><textarea value={vehicleUseForm.notes} maxLength={1000} onChange={(event) => changeVehicleUseForm("notes", event.target.value)} placeholder="Informações úteis para a equipe…" /></label>
                 <div className="form-note full"><span>✓</span>O sistema bloqueia conflitos de horário do veículo e do motorista.</div>
-                <div className="modal-actions full"><button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Cancelar</button><button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "create-vehicle-use" ? "Salvando…" : "Reservar veículo"}</button></div>
+                <div className="modal-actions full"><button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Fechar</button><button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "create-vehicle-use" ? "Salvando…" : "Reservar veículo"}</button></div>
               </form>
             ) : entryType === "visit" ? (
               <form onSubmit={submitVisit}>
@@ -1030,7 +1048,7 @@ export function AgendaBoard() {
                 <label className="form-field full"><span>Finalidade</span><input value={form.purpose} maxLength={160} onChange={(event) => changeForm("purpose", event.target.value)} placeholder="Ex.: vistoria, reunião técnica" /></label>
                 <label className="form-field full"><span>Observações <small>(opcional)</small></span><textarea value={form.notes} maxLength={1000} onChange={(event) => changeForm("notes", event.target.value)} placeholder="Contato no local, orientações de acesso…" /></label>
                 <div className="form-note full"><span>!</span>Conflitos de motorista e veículo são bloqueados automaticamente.</div>
-                <div className="modal-actions full"><button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Cancelar</button><button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "create" ? "Salvando…" : "Adicionar à agenda"}</button></div>
+                <div className="modal-actions full"><button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Fechar</button><button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "create" ? "Salvando…" : "Adicionar à agenda"}</button></div>
               </form>
             ) : (
               <form onSubmit={submitMaintenance}>
@@ -1056,7 +1074,7 @@ export function AgendaBoard() {
                 <label className="form-field"><span>Horário final</span><input type="time" value={maintenanceForm.endTime} onChange={(event) => changeMaintenanceForm("endTime", event.target.value)} required /></label>
                 <label className="form-field full"><span>Observações <small>(opcional)</small></span><textarea value={maintenanceForm.notes} maxLength={1000} onChange={(event) => changeMaintenanceForm("notes", event.target.value)} placeholder="Diagnóstico, peças, prazo previsto ou orientações…" /></label>
                 <div className="form-note warning full"><span>⚙</span>A manutenção bloqueia apenas o veículo no período; o motorista pode continuar recebendo outras visitas.</div>
-                <div className="modal-actions full"><button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Cancelar</button><button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "create-maintenance" ? "Salvando…" : "Programar manutenção"}</button></div>
+                <div className="modal-actions full"><button className="secondary-button" type="button" onClick={() => setModalOpen(false)}>Fechar</button><button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "create-maintenance" ? "Salvando…" : "Programar manutenção"}</button></div>
               </form>
             )}
           </section>

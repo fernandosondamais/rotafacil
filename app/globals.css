@@ -767,6 +767,31 @@ input:disabled {
   color: var(--pine);
 }
 
+.vehicle-delete-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #f0c4c4;
+  border-radius: 9px;
+  background: #fff5f5;
+  color: #b42318;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.vehicle-delete-button:hover {
+  border-color: #e46666;
+  background: #ffe8e8;
+}
+
+.vehicle-delete-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .vehicle-visual {
   position: relative;
   width: 120px;
@@ -1138,6 +1163,16 @@ input:disabled {
 
 .small-action.primary { background: var(--mint); color: var(--pine-deep); }
 .small-action.dark { background: var(--pine); color: white; }
+.small-action.danger {
+  background: #fff5f5;
+  color: #b42318;
+  box-shadow: inset 0 0 0 1px #f0c4c4;
+}
+
+.small-action.danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .more-action {
   display: grid;
@@ -2400,7 +2435,10 @@ footer p {
 }
 
 .visit-actions .cancel {
-  max-width: 23px;
+  flex: 0 0 auto;
+  min-width: 58px;
+  max-width: none;
+  padding: 0 8px;
   color: #a64949;
 }
 
