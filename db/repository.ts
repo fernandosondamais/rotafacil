@@ -365,6 +365,23 @@ function localDate(): string {
   }).format(new Date());
 }
 
+/** Instantes gravados/comparados como texto devem usar sempre -03:00 (nunca Z/UTC). */
+function nowIsoSaoPaulo(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}-03:00`;
+}
+
 function dayBounds(date: string) {
   return {
     start: `${date}T00:00:00-03:00`,
@@ -847,8 +864,8 @@ export async function createReservation(
   }
 
   const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const result = await db
+  const now = nowIsoSaoPaulo();
+  await db
     .prepare(
       `INSERT INTO reservations (
         id, vehicle_id, driver_id, user_name, user_email, destination, purpose,
@@ -882,7 +899,8 @@ export async function createReservation(
     )
     .run();
 
-  if (Number(result.meta.changes ?? 0) !== 1) {
+  const created = await getReservation(id);
+  if (!created) {
     throw new RepositoryError("Este veículo já possui uma reserva nesse período.", 409);
   }
 
@@ -891,7 +909,7 @@ export async function createReservation(
     startAt: input.startAt,
     endAt: input.endAt,
   });
-  return getReservation(id);
+  return created;
 }
 
 export async function updateReservationStatus(
@@ -902,7 +920,7 @@ export async function updateReservationStatus(
   const reservation = await getReservation(id);
   if (!reservation) throw new RepositoryError("Reserva não encontrada.", 404);
   const db = getDatabase();
-  const now = new Date().toISOString();
+  const now = nowIsoSaoPaulo();
 
   if (action === "cancel") {
     if (reservation.status !== "reserved") {
@@ -1278,11 +1296,11 @@ export async function createDriver(
   const db = getDatabase();
   const existing = await db
     .prepare(
-      "SELECT id, status FROM drivers WHERE name = ? COLLATE NOCASE LIMIT 1",
+      "SELECT id, status FROM drivers WHERE lower(name) = lower(?) LIMIT 1",
     )
     .bind(input.name)
     .first<{ id: string; status: string }>();
-  const now = new Date().toISOString();
+  const now = nowIsoSaoPaulo();
 
   if (existing?.status === "active") {
     throw new RepositoryError("Já existe um motorista ativo com este nome.", 409);
@@ -1376,7 +1394,7 @@ export async function archiveDriver(id: string, actor: Actor) {
       .bind(id)
       .first<{ total: number }>(),
   ]);
-  const now = new Date().toISOString();
+  const now = nowIsoSaoPaulo();
   const cancelled = {
     reservations: Number(reservationCount?.total ?? 0),
     visits: Number(visitCount?.total ?? 0),
@@ -2263,6 +2281,104 @@ export async function updateVehicle(
     after: input,
   });
   return getVehicleRecord(id);
+}
+
+export async function archiveVehicle(id: string, actor: Actor) {
+  await ensureDatabase();
+  const db = getDatabase();
+  const vehicle = await getVehicleRecord(id);
+  if (!vehicle || vehicle.status === "archived") {
+    throw new RepositoryError("Veículo não encontrado ou já removido.", 404);
+  }
+
+  const [reservationInUse, visitInProgress, maintenanceInProgress] = await Promise.all([
+    db
+      .prepare("SELECT id FROM reservations WHERE vehicle_id = ? AND status = 'in_use' LIMIT 1")
+      .bind(id)
+      .first<{ id: string }>(),
+    db
+      .prepare("SELECT id FROM agenda_visits WHERE vehicle_id = ? AND status = 'in_progress' LIMIT 1")
+      .bind(id)
+      .first<{ id: string }>(),
+    db
+      .prepare(
+        "SELECT id FROM maintenance_schedules WHERE vehicle_id = ? AND status = 'in_progress' LIMIT 1",
+      )
+      .bind(id)
+      .first<{ id: string }>(),
+  ]);
+
+  if (reservationInUse || visitInProgress || maintenanceInProgress) {
+    throw new RepositoryError(
+      "Este veículo possui uma atividade em andamento. Conclua a utilização, visita ou manutenção antes de removê-lo.",
+      409,
+    );
+  }
+
+  const [reservationCount, visitCount, maintenanceCount] = await Promise.all([
+    db
+      .prepare("SELECT COUNT(*) AS total FROM reservations WHERE vehicle_id = ? AND status = 'reserved'")
+      .bind(id)
+      .first<{ total: number }>(),
+    db
+      .prepare(
+        "SELECT COUNT(*) AS total FROM agenda_visits WHERE vehicle_id = ? AND status IN ('planned', 'confirmed')",
+      )
+      .bind(id)
+      .first<{ total: number }>(),
+    db
+      .prepare(
+        "SELECT COUNT(*) AS total FROM maintenance_schedules WHERE vehicle_id = ? AND status = 'planned'",
+      )
+      .bind(id)
+      .first<{ total: number }>(),
+  ]);
+
+  const now = nowIsoSaoPaulo();
+  const cancelled = {
+    reservations: Number(reservationCount?.total ?? 0),
+    visits: Number(visitCount?.total ?? 0),
+    maintenances: Number(maintenanceCount?.total ?? 0),
+  };
+
+  await db.batch([
+    db
+      .prepare("UPDATE vehicles SET status = 'archived', updated_at = ? WHERE id = ? AND status != 'archived'")
+      .bind(now, id),
+    db
+      .prepare(
+        `UPDATE reservations
+         SET status = 'cancelled', cancelled_at = ?, updated_at = ?
+         WHERE vehicle_id = ? AND status = 'reserved'`,
+      )
+      .bind(now, now, id),
+    db
+      .prepare(
+        `UPDATE agenda_visits SET status = 'cancelled', updated_at = ?
+         WHERE vehicle_id = ? AND status IN ('planned', 'confirmed')`,
+      )
+      .bind(now, id),
+    db
+      .prepare(
+        `UPDATE maintenance_schedules SET status = 'cancelled', updated_at = ?
+         WHERE vehicle_id = ? AND status = 'planned'`,
+      )
+      .bind(now, id),
+  ]);
+
+  await addAuditLog("vehicle.archived", actor, null, id, {
+    plate: vehicle.plate,
+    model: vehicle.model,
+    cancelled,
+  });
+
+  return {
+    id,
+    plate: vehicle.plate,
+    model: vehicle.model,
+    archived: true,
+    cancelled,
+  };
 }
 
 export class RepositoryError extends Error {

@@ -320,6 +320,32 @@ export function FleetDashboard() {
     }
   }
 
+  async function archiveCurrentVehicle() {
+    if (!editingVehicleId) return;
+    const confirmed = window.confirm(
+      "Remover este veículo da frota?\n\nO histórico será preservado. Reservas futuras serão canceladas. Utilizações em andamento precisam ser concluídas antes.",
+    );
+    if (!confirmed) return;
+
+    setBusyKey("vehicle-archive");
+    try {
+      const response = await fetch(`/api/vehicles/${editingVehicleId}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await readApiError(response));
+      setVehicleModalOpen(false);
+      setReturnToReservation(false);
+      setEditingVehicleId(null);
+      setNotice({ tone: "success", text: "Veículo removido da frota operacional." });
+      await loadDashboard(true);
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Falha ao remover o veículo.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function submitReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusyKey("create");
@@ -587,17 +613,25 @@ export function FleetDashboard() {
                           <div><span>{formatTime(vehicle.activeMaintenance.startAt)}–{formatTime(vehicle.activeMaintenance.endAt)}</span><strong>{vehicle.activeMaintenance.status === "in_progress" ? "Em manutenção" : "Manutenção programada"}</strong></div>
                           <p>{vehicle.activeMaintenance.serviceDescription}{vehicle.activeMaintenance.provider ? ` · ${vehicle.activeMaintenance.provider}` : ""}</p>
                         </div>
-                      ) : vehicle.activeReservation ? (
-                        <div className="vehicle-booking">
-                          <div><span>{formatTime(vehicle.activeReservation.startAt)}–{formatTime(vehicle.activeReservation.endAt)}</span><strong>{vehicle.activeReservation.userName}</strong></div>
-                          <p>{vehicle.activeReservation.destination}</p>
-                        </div>
-                      ) : vehicle.availability === "available" ? (
-                        <button className="reserve-link" type="button" onClick={() => openReservation(vehicle.id)}>
-                          Reservar este veículo <span aria-hidden="true">→</span>
-                        </button>
                       ) : (
-                        <div className="maintenance-note"><span aria-hidden="true">⚙</span>Indisponível para reservas</div>
+                        <>
+                          {vehicle.activeReservation ? (
+                            <div className="vehicle-booking">
+                              <div><span>{formatTime(vehicle.activeReservation.startAt)}–{formatTime(vehicle.activeReservation.endAt)}</span><strong>{vehicle.activeReservation.userName}</strong></div>
+                              <p>{vehicle.activeReservation.destination}</p>
+                            </div>
+                          ) : null}
+                          {vehicle.availability === "in_use" ? (
+                            <div className="maintenance-note"><span aria-hidden="true">⚙</span>Em uso agora — aguarde a devolução</div>
+                          ) : vehicle.availability === "maintenance" ? (
+                            <div className="maintenance-note"><span aria-hidden="true">⚙</span>Indisponível para reservas</div>
+                          ) : (
+                            <button className="reserve-link" type="button" onClick={() => openReservation(vehicle.id)}>
+                              {vehicle.activeReservation ? "Reservar em outro horário" : "Reservar este veículo"}{" "}
+                              <span aria-hidden="true">→</span>
+                            </button>
+                          )}
+                        </>
                       )}
                     </article>
                   );
@@ -724,8 +758,19 @@ export function FleetDashboard() {
                 <select aria-label="Veículo" value={form.vehicleId} onChange={(event) => changeForm("vehicleId", event.target.value)} required>
                   <option value="">Selecione um veículo</option>
                   {dashboard?.vehicles.map((vehicle) => (
-                    <option value={vehicle.id} key={vehicle.id} disabled={vehicle.availability !== "available"}>
-                      {vehicle.model} · {vehicle.plate}{vehicle.availability !== "available" ? " — indisponível" : ""}
+                    <option
+                      value={vehicle.id}
+                      key={vehicle.id}
+                      disabled={vehicle.availability === "maintenance" || vehicle.availability === "in_use"}
+                    >
+                      {vehicle.model} · {vehicle.plate}
+                      {vehicle.availability === "maintenance"
+                        ? " — em manutenção"
+                        : vehicle.availability === "in_use"
+                          ? " — em uso"
+                          : vehicle.availability === "reserved"
+                            ? " — possui reserva no dia"
+                            : ""}
                     </option>
                   ))}
                 </select>
@@ -809,9 +854,23 @@ export function FleetDashboard() {
                 <div className="form-note warning full"><span>!</span>O veículo ficará indisponível para novas reservas até ser reativado.</div>
               )}
               <div className="form-note full"><span>✓</span>A placa será padronizada e a quilometragem não poderá ser reduzida.</div>
-              <div className="modal-actions full">
-                <button className="secondary-button" type="button" onClick={closeVehicleForm}>Cancelar</button>
-                <button className="primary-button" type="submit" disabled={busyKey !== null}>{busyKey === "vehicle-save" ? "Salvando…" : editingVehicleId ? "Salvar alterações" : "Adicionar veículo"}</button>
+              <div className="modal-actions full vehicle-modal-actions">
+                {editingVehicleId ? (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={() => void archiveCurrentVehicle()}
+                    disabled={busyKey !== null}
+                  >
+                    {busyKey === "vehicle-archive" ? "Removendo…" : "Excluir veículo"}
+                  </button>
+                ) : null}
+                <div className="modal-actions-spacer">
+                  <button className="secondary-button" type="button" onClick={closeVehicleForm}>Cancelar</button>
+                  <button className="primary-button" type="submit" disabled={busyKey !== null}>
+                    {busyKey === "vehicle-save" ? "Salvando…" : editingVehicleId ? "Salvar alterações" : "Adicionar veículo"}
+                  </button>
+                </div>
               </div>
             </form>
           </section>

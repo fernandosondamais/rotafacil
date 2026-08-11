@@ -154,6 +154,23 @@ function todayInSaoPaulo() {
   }).format(new Date());
 }
 
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(value));
+}
+
+function dateInSaoPaulo(value: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
 function startOfWeek(date: string) {
   const value = new Date(`${date}T12:00:00Z`);
   const day = value.getUTCDay();
@@ -320,8 +337,8 @@ export function AgendaBoard() {
   const maintenancesByCell = useMemo(() => {
     const cells = new Map<string, Maintenance[]>();
     for (const maintenance of agenda?.maintenances ?? []) {
-      let currentDate = maintenance.startAt.slice(0, 10);
-      const endDate = maintenance.endAt.slice(0, 10);
+      let currentDate = dateInSaoPaulo(maintenance.startAt);
+      const endDate = dateInSaoPaulo(maintenance.endAt);
       while (currentDate <= endDate) {
         const key = `${maintenance.driverId}:${currentDate}`;
         const current = cells.get(key) ?? [];
@@ -335,8 +352,8 @@ export function AgendaBoard() {
   const vehicleUsesByCell = useMemo(() => {
     const cells = new Map<string, VehicleUse[]>();
     for (const vehicleUse of agenda?.vehicleUses ?? []) {
-      let currentDate = vehicleUse.startAt.slice(0, 10);
-      const endDate = vehicleUse.endAt.slice(0, 10);
+      let currentDate = dateInSaoPaulo(vehicleUse.startAt);
+      const endDate = dateInSaoPaulo(vehicleUse.endAt);
       while (currentDate <= endDate) {
         const key = `${vehicleUse.driverId}:${currentDate}`;
         const current = cells.get(key) ?? [];
@@ -801,7 +818,7 @@ export function AgendaBoard() {
                               <article className={`visit-card vehicle-use-card ${vehicleUse.status}`} key={vehicleUse.id}>
                                 <div className="visit-card-top">
                                   <span className="vehicle-use-kind"><i />Uso do veículo</span>
-                                  <strong>{vehicleUse.startAt.slice(11, 16)}–{vehicleUse.endAt.slice(11, 16)}</strong>
+                                  <strong>{formatTime(vehicleUse.startAt)}–{formatTime(vehicleUse.endAt)}</strong>
                                 </div>
                                 <h3>{vehicleUse.vehicleLabel}</h3>
                                 <p><span aria-hidden="true">⌖</span>{vehicleUse.destination}</p>
@@ -841,7 +858,7 @@ export function AgendaBoard() {
                                 </div>
                                 <h3>{maintenance.vehicleLabel}</h3>
                                 <p className="visit-purpose"><span aria-hidden="true">⚙</span>{maintenance.serviceDescription}</p>
-                                <p><span aria-hidden="true">◷</span>{maintenance.startAt.slice(11, 16)}–{maintenance.endAt.slice(11, 16)}</p>
+                                <p><span aria-hidden="true">◷</span>{formatTime(maintenance.startAt)}–{formatTime(maintenance.endAt)}</p>
                                 {maintenance.provider && <small><span aria-hidden="true">⌂</span>{maintenance.provider}</small>}
                                 <div className="visit-actions">
                                   {maintenance.status === "planned" && <button type="button" disabled={busyKey !== null} onClick={() => void updateMaintenance(maintenance, "start")}>Iniciar</button>}

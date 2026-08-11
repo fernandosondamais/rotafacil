@@ -81,8 +81,11 @@ function createPgStatement(pool: pg.Pool, sql: string, params: SqlValue[] = []):
       return ((result.rows[0] as T) ?? null) as T | null;
     },
     async run() {
-      await pool.query(toPgPlaceholders(sql), params);
-      return { success: true, meta: {} };
+      const result = await pool.query(toPgPlaceholders(sql), params);
+      return {
+        success: true,
+        meta: { changes: result.rowCount ?? 0, rowCount: result.rowCount ?? 0 },
+      };
     },
   };
 }
@@ -100,8 +103,11 @@ function createSqliteStatement(db: DatabaseSync, sql: string, params: SqlValue[]
       return (db.prepare(sql).get(...asSqliteParams(params)) as T | undefined) ?? null;
     },
     async run() {
-      db.prepare(sql).run(...asSqliteParams(params));
-      return { success: true, meta: {} };
+      const result = db.prepare(sql).run(...asSqliteParams(params)) as {
+        changes?: number;
+      };
+      const changes = Number(result.changes ?? 0);
+      return { success: true, meta: { changes, rowCount: changes } };
     },
   };
 }
