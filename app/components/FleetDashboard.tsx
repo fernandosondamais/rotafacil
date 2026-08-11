@@ -397,9 +397,9 @@ export function FleetDashboard() {
       });
       if (!response.ok) throw new Error(await readApiError(response));
       const messages = {
-        cancel: "Reserva cancelada. O veículo está disponível novamente.",
+        cancel: "Reserva excluída. O veículo está disponível novamente.",
         start: "Saída registrada. Boa viagem!",
-        complete: "Chegada registrada e veículo liberado.",
+        complete: "Utilização fechada e veículo liberado.",
       };
       setNotice({ tone: "success", text: messages[action] });
       await loadDashboard(true);
