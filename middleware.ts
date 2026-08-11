@@ -6,7 +6,7 @@ import {
   safeNextPath,
 } from "@/app/lib/session";
 
-const PUBLIC_PATHS = new Set(["/", "/login"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/api/health"]);
 
 function isPublicAsset(pathname: string) {
   return (

@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import pg from "pg";
 
 export type SqlValue = string | number | null | boolean | Buffer | Uint8Array;
@@ -55,11 +54,28 @@ export type AppBindings = {
 
 type RuntimeMode = "postgres" | "sqlite";
 
+type SqliteDb = {
+  prepare: (sql: string) => {
+    all: (...params: Array<string | number | null | bigint | Uint8Array>) => unknown[];
+    get: (...params: Array<string | number | null | bigint | Uint8Array>) => unknown;
+    run: (...params: Array<string | number | null | bigint | Uint8Array>) => { changes?: number };
+  };
+  exec: (sql: string) => void;
+};
+
 let bindingsPromise: Promise<AppBindings> | null = null;
 let cachedBindings: AppBindings | null = null;
 
 function dataDir() {
   return process.env.DATA_DIR || path.join(process.cwd(), ".data");
+}
+
+function isProductionRuntime() {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.RENDER === "true" ||
+    Boolean(process.env.RENDER_SERVICE_ID)
+  );
 }
 
 function toPgPlaceholders(sql: string) {
@@ -90,7 +106,7 @@ function createPgStatement(pool: pg.Pool, sql: string, params: SqlValue[] = []):
   };
 }
 
-function createSqliteStatement(db: DatabaseSync, sql: string, params: SqlValue[] = []): PreparedStatement {
+function createSqliteStatement(db: SqliteDb, sql: string, params: SqlValue[] = []): PreparedStatement {
   return {
     bind(...nextParams: SqlValue[]) {
       return createSqliteStatement(db, sql, nextParams);
@@ -103,9 +119,7 @@ function createSqliteStatement(db: DatabaseSync, sql: string, params: SqlValue[]
       return (db.prepare(sql).get(...asSqliteParams(params)) as T | undefined) ?? null;
     },
     async run() {
-      const result = db.prepare(sql).run(...asSqliteParams(params)) as {
-        changes?: number;
-      };
+      const result = db.prepare(sql).run(...asSqliteParams(params));
       const changes = Number(result.changes ?? 0);
       return { success: true, meta: { changes, rowCount: changes } };
     },
@@ -127,7 +141,7 @@ function createPgDatabase(pool: pg.Pool): AppDatabase {
   };
 }
 
-function createSqliteDatabase(db: DatabaseSync): AppDatabase {
+function createSqliteDatabase(db: SqliteDb): AppDatabase {
   db.exec("PRAGMA foreign_keys = ON");
   return {
     prepare(sql: string) {
@@ -253,17 +267,27 @@ async function createBindings(): Promise<AppBindings> {
           ? undefined
           : { rejectUnauthorized: false },
     });
+    await pool.query("SELECT 1");
     await ensurePostgresPhotoTable(pool);
+    console.info("[rotafacil] Banco: PostgreSQL (DATABASE_URL)");
     return {
       DB: createPgDatabase(pool),
       PHOTOS: createPostgresPhotoBucket(pool),
     };
   }
 
+  if (isProductionRuntime()) {
+    throw new Error(
+      "DATABASE_URL não configurada no Render. Vincule o PostgreSQL ao Web Service e faça novo deploy.",
+    );
+  }
+
+  const { DatabaseSync } = await import("node:sqlite");
   const root = dataDir();
   await fs.mkdir(root, { recursive: true });
   const dbPath = process.env.SQLITE_PATH || path.join(root, "rotafacil.sqlite");
-  const sqlite = new DatabaseSync(dbPath);
+  const sqlite = new DatabaseSync(dbPath) as unknown as SqliteDb;
+  console.info(`[rotafacil] Banco: SQLite local (${dbPath})`);
   return {
     DB: createSqliteDatabase(sqlite),
     PHOTOS: createFsPhotoBucket(path.join(root, "photos")),

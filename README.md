@@ -25,10 +25,13 @@ Sem `DATABASE_URL`, usa SQLite em `.data/rotafacil.sqlite`.
 3. Build: `npm ci && npm run build`
 4. Start: `npm run start`
 5. Environment:
-   - `DATABASE_URL` = Internal Database URL do Postgres no Render
+   - `DATABASE_URL` = Internal Database URL do Postgres no Render (**obrigatório**)
    - `APP_PASSWORD` = senha de acesso
-   - `APP_SEED` = `true` na primeira subida (dados demo)
+   - `APP_SEED` = `true` na primeira subida
    - `NODE_VERSION` = `22.13.0` (ou superior)
+
+Diagnóstico: `GET /api/health` deve retornar `"mode":"postgres"`.
+Se aparecer aviso de SQLite nos logs de produção, a `DATABASE_URL` não está ligada ao serviço.
 
 ## Scripts
 
